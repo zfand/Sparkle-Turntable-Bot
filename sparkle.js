@@ -139,7 +139,9 @@ function initializeModules() {
 		process.exit(33);
 	}
 
-	bot = new Bot(config.botinfo.auth, config.botinfo.userid, config.roomid);
+	roomid = process.env.ROOM_ID ? process.env.ROOM_ID : config.roomid;
+
+	bot = new Bot(config.botinfo.auth, config.botinfo.userid, roomid);
 
 	//Loads bot singalongs
 	if(config.responses.sing) {
