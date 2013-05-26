@@ -237,7 +237,7 @@ exports.speakEventHandler = function (data) {
     //If it's a supported command, handle it    
     
     if (config.responses.respond) {
-        handleCommand(data.name, data.userid, data.text.toLowerCase(), 'speak');
+        handleCommand(data.name, data.userid, data.text, 'speak');
     }
 
 	// Update the last activity for the dj if it was sending the message and remove the warning
