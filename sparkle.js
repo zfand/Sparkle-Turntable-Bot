@@ -14,6 +14,39 @@
  *
  */
 var args = process.argv;
+var http = require('http');
+
+if (config.webstatus) {
+    var ipaddr  = process.env.OPENSHIFT_NODEJS_IP || "127.0.0.1";
+    var port    = process.env.OPENSHIFT_NODEJS_PORT || 8080;
+
+    http.createServer(function (req, res) {
+        var addr = "unknown";
+        var out = "";
+        if (req.headers.hasOwnProperty('x-forwarded-for')) {
+            addr = req.headers['x-forwarded-for'];
+        } else if (req.headers.hasOwnProperty('remote-addr')){
+            addr = req.headers['remote-addr'];
+        }
+
+        if (req.headers.hasOwnProperty('accept')) {
+            if (req.headers['accept'].toLowerCase() == "application/json") {
+                  res.writeHead(200, {'Content-Type': 'application/json'});
+                  res.end(JSON.stringify({'ip': addr}, null, 4) + "\n");			
+                  return ;
+            }
+        }
+
+      res.writeHead(200, {'Content-Type': 'text/html'});
+      res.write("Welcome to this bot. Can't tell you much here though!");
+      res.write('Visit us at <a href="http://turntable.fm/">  TT. </a><br>');
+      res.write("Your IP address seems to be " + addr + "<br>");
+      client.query('SELECT count(*) as total FROM '+ config.database.dbname + '.' + config.database.tablenames.song,
+                function select(error, results, fields) {
+                    res.end(results[0]['total'] + " songs have been played here");
+                });
+    }).listen(port, ipaddr);
+}
 global.package = require('./package.json');
 
 global.fs = require('fs');
@@ -56,6 +89,13 @@ global.bonuspoints = new Array();      //An array of DJs wanting the bot to bonu
 global.bonusvote = false;              //A flag denoting if the bot has bonus'd a song
 global.bonusvotepoints = 0;            //The number of awesomes needed for the bot to awesome
 
+global.nomodurls = ['http://i.imgur.com/8Nb4gu2.jpg',
+                    'http://i.imgur.com/LP977oP.gif',
+                    'I know - http://i.imgur.com/kgdbKsw.gif',
+                    'http://i.imgur.com/sjRv3Sv.gif',
+                    'http://i.imgur.com/xLhBEMC.gif',
+                    ];
+                   
 //Current song info
 global.currentsong = {
 	artist:   null,
@@ -168,25 +208,16 @@ function initializeModules() {
 			config.database.usedb = false;
 		}
 
-		//Connects to mysql server
-		try {
+        function createMySqlConnection() {
 			var dbhost = 'localhost';
 			if(config.database.login.host != null && config.database.login.host != '') {
 				dbhost = config.database.login.host;
 			}
-			client =
-				mysql.createConnection({user:config.database.login.user, password:config.database.login.password, database:config.database.dbname, host:dbhost});
-
-
-		} catch(e) {
-			console.log(e);
-			console.log('Make sure that a mysql server instance is running and that the '
-				+ 'username and password information in config.js are correct.');
-			console.log('Starting bot without database functionality.');
-			config.database.usedb = false;
+			return mysql.createConnection({user:config.database.login.user, 
+                                        password:config.database.login.password, 
+                                        database:config.database.dbname, 
+                                        host: config.database.login.host});// */
 		}
-
-		handleDisconnect(client);
 
 		function handleDisconnect(client) {
 			client.on('error', function(err) {
@@ -196,16 +227,24 @@ function initializeModules() {
 				if(err.code !== 'PROTOCOL_CONNECTION_LOST') {
 					throw err;
 				}
-				if(config.consolelog) {
 					console.log('Re-connecting lost connection: ' + err.stack);
-				}
-
-				client =
-					mysql.createConnection({user:config.database.login.user, password:config.database.login.password, database:config.database.dbname, host:dbhost});
+				client = createMySqlConnection();
 				handleDisconnect(client);
 				client.connect();
 			});
 		}
+        
+		//Connects to mysql server
+		try {
+			client = createMySqlConnection();
+		} catch(e) {
+			console.log(e);
+			console.log('Make sure that a mysql server instance is running and that the '
+				+ 'username and password information in config.js are correct.');
+			console.log('Starting bot without database functionality.');
+			config.database.usedb = false;
+		}
+		handleDisconnect(client);
 	}
 
 	//Initializes request module
@@ -229,8 +268,9 @@ function initializeModules() {
 	}
 
 	//Create HTTP listeners
+    
 	if(config.http.usehttp) {
-		bot.listen(config.http.port, config.http.host);
+		bot.listen(config.http.port, config.http.host || process.env.OPENSHIFT_NODEJS_IP);
 	}
 
 	//Load commands
@@ -238,12 +278,8 @@ function initializeModules() {
 		var filenames = fs.readdirSync('./commands');
 		for(i in filenames) {
 			var command = require('./commands/' + filenames[i]);
-			commands.push({handler:      command.handler ? command.handler : function(data) {}, 
-							name:        command.name ? command.name : "", 
-							hidden:      command.hidden ? command.hidden : true,
-							enabled:     command.enabled ? command.enabled : false, 
-							matchStart:  command.matchStart ? command.matchStart : false,
-							isValidFor:  command.isValidFor ? command.isValidFor : defaultIsValid});
+            commands.push({name:command.name, handler:command.handler, hidden:command.hidden,
+				enabled:        command.enabled, matchStart:command.matchStart});
 		}
 	} catch(e) {
 		console.log('Unable to load command: ', e);
@@ -261,11 +297,6 @@ function initializeModules() {
 		//
 	}
 
-}
-
-//TODO document me
-function defaultIsValid(data) {
-	return false;
 }
 
 //Sets up the database
@@ -358,11 +389,19 @@ global.output = function(data) {
 
 //Checks if the user id is present in the admin list. Authentication
 //for admin-only privileges.
-global.admincheck = function(userid) {
-	return (userid === config.admin ||
+global.admincheck = function(userid, data) {
+	var isAdmin = (userid === config.admin ||
 		moderators.some(function(moderatorid) {
 			return moderatorid === userid;
 		}));
+    if (data && !isAdmin && config.modnotice) {
+        var urls = global.nomodurls;
+        global.output({text: 'Thats a mod command - ' + 
+                             urls[parseInt(Math.random()*urls.length)], 
+                       destination: 'pm', 
+                       userid: data.userid}); 
+    }
+    return isAdmin;
 }
 
 global.loop = function() {
@@ -472,13 +511,9 @@ global.addToDb = function(data) {
 global.welcomeUser = function(name, id) {
 	//Ignore ttstats bots
 	if(!name.match(/^ttstats/)) {
-		if(id == '4f5628b9a3f7515810008122') {
-			bot.speak(':cat: <3 :wolf:');
-		}
-		else if(id == '4df0443f4fe7d0631905d6a8') {
+        if(id == '4df0443f4fe7d0631905d6a8') {
 			bot.speak(':cat: <3 ' + name);
-		}
-		else if(config.database.usedb) {
+		} else if(config.database.usedb) {
 			client.query('SELECT greeting FROM ' + config.database.dbname + '.'
 				+ config.database.tablenames.holiday + ' WHERE date LIKE CURDATE()',
 				function cbfunc(error, results, fields) {
@@ -489,7 +524,7 @@ global.welcomeUser = function(name, id) {
 					}
 				});
 		} else {
-			bot.speak(config.responses.greeting + name + '!');
+			bot.speak(config.responses.greeting + name + '! Watch your (dub)step.');
 		}
 	}
 }
@@ -516,6 +551,9 @@ global.reducePastDJCounts = function(djid) {
 	if(config.enforcement.songslimit.limitsongs && djs.length >= config.enforcement.songslimit.minDjs) {
 		for(i in djs) {
 			if(djs[i].id == djid) {
+				if (!djs[i].remaining) {
+                    djs[i].remaining = config.enforcement.songslimit.maxsongs || 1;
+                }
 				djs[i].remaining--;
 				if(djs[i].remaining <= 0) {
 					userstepped = false;
@@ -656,9 +694,18 @@ global.checkWaitlist = function(userid, name) {
 			}
 			return true;
 		}
+        
 		bot.remDj(userid);
 		bot.speak(name + ', you\'re not next on the waitlist. Please let '
 			+ waitlist[0].name + ' up.');
+            
+        // If a DJ is escorted add to queue in 300 ms
+        if (userid != config.botinfo.userid) {
+            setTimeout(function() {
+                global.addToWaitlist(userid, name, 'speak');
+            }, 300);
+        }
+        
 		legalstepdown = false;
 		return false;
 	}
@@ -756,19 +803,43 @@ global.canUserStep = function(name, userid) {
 //Handles chat commands
 global.handleCommand = function(name, userid, text, source) {
 	var data = {name:name, userid:userid, text:text, source:source};
+	
 	for(i in commands) {
+		//Continue if it's not enabled
 		if (!commands[i].enabled) {
-			break;
+			continue;
+		//check commands if they are valid
 		} else if (commands[i].isValidFor(data)) {
 			commands[i].handler(data);
 			break;
-		} else if(commands[i].matchStart && (text.toLowerCase().indexOf(commands[i].name) == 0)) {
-			commands[i].handler(data);
-			break;
-		} else if(commands[i].name == text.toLowerCase()) {
-			commands[i].handler(data);
-			break;
-		}
+		//check them by name
+		} else {
+			var comms = null;
+	        if (commands[i].name instanceof Array) {
+	            comms = commands[i].name;
+	        } else {
+	            comms = [commands[i].name];
+	        }
+	        var found = false;
+	        for (var x in comms) {
+	            if (comms[x] instanceof RegExp) {
+	                if (comms[x].test(text)) {
+	                    found = true;
+	                    break;
+	                }
+	            } else if(commands[i].matchStart && (text.toLowerCase().indexOf(comms[x]) == 0)) {
+	                found = true;
+	                break;
+	            } else if(comms[x] == text.toLowerCase()) {
+	                found = true; 
+	                break;
+	            }
+	        }
+	        if (found) {
+	            commands[i].handler({name:name, userid:userid, text:text, source:source});
+	            break;
+	        }
+	    }
 	}
 
 	//--------------------------------------
@@ -843,3 +914,6 @@ global.handleCommand = function(name, userid, text, source) {
 	}
 }
 
+process.on('uncaughtException', function (err) {
+  console.log(err.stack);
+});
