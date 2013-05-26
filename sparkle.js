@@ -251,8 +251,12 @@ function initializeModules() {
 		var filenames = fs.readdirSync('./commands');
 		for(i in filenames) {
 			var command = require('./commands/' + filenames[i]);
-            commands.push({name:command.name, handler:command.handler, hidden:command.hidden,
-				enabled:        command.enabled, matchStart:command.matchStart});
+			commands.push({handler:      command.handler ? command.handler : function(data) {}, 
+							name:        command.name ? command.name : "", 
+							hidden:      command.hidden ? command.hidden : true,
+							enabled:     command.enabled ? command.enabled : false, 
+							matchStart:  command.matchStart ? command.matchStart : false,
+							isValidFor:  command.isValidFor ? command.isValidFor : defaultIsValid});
 		}
 	} catch(e) {
 		console.log('Unable to load command: ', e);
@@ -270,6 +274,11 @@ function initializeModules() {
 		//
 	}
 
+}
+
+//TODO document me
+function defaultIsValid(data) {
+	return false;
 }
 
 //Sets up the database

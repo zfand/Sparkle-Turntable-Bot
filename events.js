@@ -532,17 +532,17 @@ exports.pmEventHandler = function(data) {
 	try {
         //Case 1: In room. We have their name.
         if (usersList[data.senderid] != null) {
-            handleCommand(usersList[data.senderid].name, data.senderid, data.text.toLowerCase(), 'pm');
+            handleCommand(usersList[data.senderid].name, data.senderid, data.text, 'pm');
         //Case 2: In DB. We have their name.
         } else if (config.database.usedb) {
             client.query('SELECT username FROM ' + config.database.dbname + '.' + config.database.tablenames.users + ' WHERE userid LIKE \'' + data.senderid
                 + '\' ORDER BY lastseen DESC LIMIT 1',
                 function cb(error, results, fields) {
                     if (results != null && results[0] != null) {
-                        handleCommand(results[0]['username'], data.senderid, data.text.toLowerCase(), 'pm');
+                        handleCommand(results[0]['username'], data.senderid, data.text, 'pm');
                     } else {
                         bot.getProfile(data.senderid, function(d) {
-                            handleCommand(d.name, data.senderid, data.text.toLowerCase(), 'pm');
+                            handleCommand(d.name, data.senderid, data.text, 'pm');
                         });
                     }
             });
