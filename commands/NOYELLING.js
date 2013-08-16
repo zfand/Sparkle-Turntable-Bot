@@ -1,11 +1,11 @@
-var output = ["SHHHHHHH", "SHHHHHHH", "SHH!", "NO YELLING", "CAPS LOCK BRAH", "SHHH DUNKEY", "LET ME TELL YOU A LITTLE STORY ABOUT A MAN NAMED SHH","SHH", "http://i.imgur.com/V0y1tXL.gif", "http://i.imgur.com/YGi0gkl.gif", "http://i.imgur.com/5lg65WI.gif"];
+var output = ["SHHHHHHH", "SHHHHHHH", "SHH!", "NO YELLING", "CAPS LOCK BRAH", "SHHH DUNKEY", "LET ME TELL YOU A LITTLE STORY ABOUT A MAN NAMED SHH","SHH", "http://i.imgur.com/V0y1tXL.gif", "http://i.imgur.com/YGi0gkl.gif", "http://i.imgur.com/5lg65WI.gif", "http://i.imgur.com/CMRx3.gif"];
 exports.name = '';
 exports.hidden = true;
 exports.enabled = true;
 exports.matchStart = false;
 exports.isValidFor = function(data) {
 	var text = data.text.replace(/[^a-zA-Z ]/g, "");
-	if (text.length > 1) {
+	if (text.length > 0) {
 
 		//skip I
 		if (text == "I") {
@@ -20,8 +20,12 @@ exports.isValidFor = function(data) {
 			return false;
 		}
 
+		// if /me
+		if (data.text.indexOf("/me") == 0) {
+			text = text.slice(2,text.length);
+		}
 
-		//now heck
+		//now check
 		if (text == text.toUpperCase()) {
 			return true;
 		}
